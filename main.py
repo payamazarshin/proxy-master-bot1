@@ -79,6 +79,45 @@ async def plan_selected(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
 
 
+# دستور مخصوص خود شما (ادمین) برای ارسال کانفیگ به مشتری از طریق خود ربات
+# نحوه استفاده: /send آیدی_عددی_مشتری متن_کانفیگ
+# مثال: /send 123456789 اینم کانفیگت: vless://....
+async def send_config(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    # فقط خود شما (ادمین) اجازه استفاده از این دستور رو دارید
+    if update.message.from_user.id != ADMIN_CHAT_ID:
+        return
+
+    # context.args یعنی کلماتی که بعد از /send نوشته شده
+    if len(context.args) < 2:
+        await update.message.reply_text(
+            "❗️ فرمت درست:\n/send آیدی_عددی_مشتری متن_کانفیگ\n\n"
+            "مثال:\n/send 123456789 اینم کانفیگت: vless://...."
+        )
+        return
+
+    # اولین کلمه = آیدی عددی مشتری، بقیه‌ی متن = خود کانفیگ
+    customer_id_text = context.args[0]
+    config_text = " ".join(context.args[1:])
+
+    if not customer_id_text.isdigit():
+        await update.message.reply_text("❗️ آیدی عددی باید فقط عدد باشه.")
+        return
+
+    customer_id = int(customer_id_text)
+
+    try:
+        await context.bot.send_message(
+            chat_id=customer_id,
+            text=f"🎉 کانفیگت آماده‌ست:\n\n{config_text}",
+        )
+        await update.message.reply_text("✅ کانفیگ با موفقیت برای مشتری ارسال شد.")
+    except Exception as e:
+        # مثلاً وقتی مشتری هیچ‌وقت با ربات /start نزده باشه، ارسال ممکنه شکست بخوره
+        await update.message.reply_text(
+            f"❌ ارسال ناموفق بود. احتمالاً مشتری قبلاً با ربات /start نزده.\nخطا: {e}"
+        )
+
+
 # اجرای اصلی ربات
 def main():
     app = (
@@ -92,6 +131,7 @@ def main():
     )
 
     app.add_handler(CommandHandler("start", start))
+    app.add_handler(CommandHandler("send", send_config))
     app.add_handler(CallbackQueryHandler(plan_selected))
 
     print("ربات روشن شد و منتظر پیام‌هاست...")
