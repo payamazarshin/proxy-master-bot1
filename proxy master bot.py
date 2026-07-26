@@ -11,11 +11,6 @@ BOT_TOKEN = "8831432109:AAE8Uq0tUyBf2AiKvxUKFbd4s3ZJT0RQAYE"
 # آیدی عددی خود شما - وقتی سفارش جدید بیاد، ربات به همین آیدی پیام می‌فرسته
 ADMIN_CHAT_ID = 2064026398
 
-# آدرس پروکسی محلی V2rayN
-# توی V2rayN برو تو تنظیمات (Settings) -> Basic Settings و ببین "Socks port" چند نوشته
-# (معمولاً پیشفرض 10808 هست) - همون عدد رو جای 10808 بذار
-PROXY_URL = "socks5h://127.0.0.1:40808"
-
 # ⚠️ شماره کارتی که کاربر باید بهش پول واریز کنه
 CARD_NUMBER = "5022291545430785"
 CARD_OWNER_NAME = "رضا آذرشین"
@@ -89,8 +84,6 @@ def main():
     app = (
         Application.builder()
         .token(BOT_TOKEN)
-        .proxy(PROXY_URL)
-        .get_updates_proxy(PROXY_URL)
         .connect_timeout(30)
         .read_timeout(30)
         .write_timeout(30)
