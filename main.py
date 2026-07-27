@@ -1,14 +1,17 @@
 # ----------------------------------------------------
-# ربات فروش پروکسی / VPN - نسخه با دسته‌بندی پلن‌ها
+# نسخه یا سئخیندی پلن‌ها / VPN - ریلف فروش پروکسی
 # ----------------------------------------------------
 
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import Application, CommandHandler, CallbackQueryHandler, ContextTypes
 
-# ⚠️ توکن ربات خودت رو اینجا بذار (همونی که از BotFather گرفتی)
-BOT_TOKEN = "8831432109:AAE8Uq0tUyBf2AiKvxUKFbd4s3ZJT0RQAYE"
+# ⚠️ توکن ربات خودت رو اینجا بذار (از BotFather گرفتی)
+BOT_TOKEN = "8831432109:AAHDmncPPbZJncLWpnoPmJ2xCX7zkTrlw7E"
 
-# ⚠️ شماره کارتی که کاربر باید بهش پول واریز کنه
+# ⚠️ آیدی عددی خودت (ادمین) - سفارش‌های جدید به این آیدی فرستاده میشه
+ADMIN_CHAT_ID = 2064026398
+
+# شماره کارتی که کاربر باید بهش پول واریز کنه
 CARD_NUMBER = "5022291545430785"
 CARD_OWNER_NAME = "رضا آذرشین"
 
@@ -45,7 +48,6 @@ def build_plans_keyboard(cat_id):
     for plan_id, plan in PLANS[cat_id].items():
         button_text = f"{plan['title']} - {plan['price']:,} تومان"
         keyboard.append([InlineKeyboardButton(button_text, callback_data=f"plan:{plan_id}")])
-    # دکمه بازگشت به مرحله انتخاب دسته
     keyboard.append([InlineKeyboardButton("🔙 بازگشت", callback_data="back:categories")])
     return InlineKeyboardMarkup(keyboard)
 
@@ -85,7 +87,6 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # کاربر یک پلن نهایی رو انتخاب کرده
     if data.startswith("plan:"):
         plan_id = data.split(":", 1)[1]
-        # پیدا کردن پلن داخل هر دو دسته
         plan = None
         for cat_plans in PLANS.values():
             if plan_id in cat_plans:
@@ -103,12 +104,43 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
         await query.edit_message_text(text)
 
+        # ثبت سفارش در فایل
         with open("orders.txt", "a", encoding="utf-8") as f:
             f.write(
                 f"کاربر: {user.first_name} (@{user.username}) | آیدی عددی: {user.id} | "
                 f"پلن: {plan['title']} | مبلغ: {plan['price']}\n"
             )
+
+        # 🔔 اطلاع‌رسانی سفارش جدید به ادمین (خودت) توی تلگرام
+        admin_text = (
+            "🔔 سفارش جدید!\n\n"
+            f"کاربر: {user.first_name} (@{user.username})\n"
+            f"آیدی عددی کاربر: {user.id}\n"
+            f"پلن: {plan['title']}\n"
+            f"مبلغ: {plan['price']:,} تومان"
+        )
+        await context.bot.send_message(chat_id=ADMIN_CHAT_ID, text=admin_text)
         return
+
+
+# دستور ادمین برای ارسال کانفیگ به مشتری: /send USER_ID config_text
+async def send_config(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    # فقط خود ادمین بتونه از این دستور استفاده کنه
+    if update.effective_user.id != ADMIN_CHAT_ID:
+        return
+
+    if not context.args or len(context.args) < 2:
+        await update.message.reply_text("فرمت درست: /send USER_ID config_text")
+        return
+
+    target_user_id = context.args[0]
+    config_text = " ".join(context.args[1:])
+
+    try:
+        await context.bot.send_message(chat_id=int(target_user_id), text=config_text)
+        await update.message.reply_text("✅ کانفیگ با موفقیت برای مشتری ارسال شد.")
+    except Exception as e:
+        await update.message.reply_text(f"❌ ارسال ناموفق بود: {e}")
 
 
 def main():
@@ -119,6 +151,7 @@ def main():
     )
 
     app.add_handler(CommandHandler("start", start))
+    app.add_handler(CommandHandler("send", send_config))
     app.add_handler(CallbackQueryHandler(button_handler))
 
     print("ربات روشن شد و منتظر پیام‌هاست...")
