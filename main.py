@@ -1,138 +1,130 @@
 # ----------------------------------------------------
-# ربات فروش پروکسی / VPN - نسخه اولیه (با اطلاع‌رسانی سفارش)
+# ربات فروش پروکسی / VPN - نسخه با دسته‌بندی پلن‌ها
 # ----------------------------------------------------
 
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import Application, CommandHandler, CallbackQueryHandler, ContextTypes
 
 # ⚠️ توکن ربات خودت رو اینجا بذار (همونی که از BotFather گرفتی)
-BOT_TOKEN = "8831432109:AAE8Uq0tUyBf2AiKvxUKFbd4s3ZJT0RQAYE"
+BOT_TOKEN = "8831432109:AAHDmncPPbZJncLWpnoPmJ2xCX7zkTrlw7E"
 
-# آیدی عددی خود شما - وقتی سفارش جدید بیاد، ربات به همین آیدی پیام می‌فرسته
-ADMIN_CHAT_ID = 2064026398
+# آدرس پروکسی محلی V2rayN
+PROXY_URL = "socks5://127.0.0.1:10808"
 
 # ⚠️ شماره کارتی که کاربر باید بهش پول واریز کنه
 CARD_NUMBER = "5022291545430785"
 CARD_OWNER_NAME = "رضا آذرشین"
 
-# قیمت پلن‌ها (تومان)
+# دسته‌بندی پلن‌ها
+CATEGORIES = {
+    "fixed": "آیپی ثابت (مخصوص حجمی)",
+    "unlimited": "نامحدود (معمولی)",
+}
+
+# پلن‌های هر دسته
 PLANS = {
-    "1month": {"title": "۱ ماهه", "price": 130000},
-    "2month": {"title": "۲ ماهه", "price": 250000},
-    "3month": {"title": "۳ ماهه", "price": 350000},
+    "fixed": {
+        "fixed_30g": {"title": "آیپی ثابت ۱ ماهه ۳۰ گیگ تک کاربره", "price": 400000},
+        "fixed_20g": {"title": "آیپی ثابت ۱ ماهه ۲۰ گیگ تک کاربره", "price": 350000},
+        "fixed_10g": {"title": "آیپی ثابت ۱ ماهه ۱۰ گیگ تک کاربره", "price": 200000},
+    },
+    "unlimited": {
+        "unl_1m": {"title": "نامحدود ۱ ماهه", "price": 130000},
+        "unl_2m": {"title": "نامحدود ۲ ماهه", "price": 250000},
+        "unl_3m": {"title": "نامحدود ۳ ماهه", "price": 350000},
+    },
 }
 
 
-# وقتی کاربر دستور /start رو بزنه، این تابع اجرا میشه
-async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    # ساخت دکمه برای هر پلن
+def build_category_keyboard():
     keyboard = []
-    for plan_id, plan in PLANS.items():
+    for cat_id, title in CATEGORIES.items():
+        keyboard.append([InlineKeyboardButton(title, callback_data=f"cat:{cat_id}")])
+    return InlineKeyboardMarkup(keyboard)
+
+
+def build_plans_keyboard(cat_id):
+    keyboard = []
+    for plan_id, plan in PLANS[cat_id].items():
         button_text = f"{plan['title']} - {plan['price']:,} تومان"
-        keyboard.append([InlineKeyboardButton(button_text, callback_data=plan_id)])
+        keyboard.append([InlineKeyboardButton(button_text, callback_data=f"plan:{plan_id}")])
+    # دکمه بازگشت به مرحله انتخاب دسته
+    keyboard.append([InlineKeyboardButton("🔙 بازگشت", callback_data="back:categories")])
+    return InlineKeyboardMarkup(keyboard)
 
-    reply_markup = InlineKeyboardMarkup(keyboard)
 
+# وقتی کاربر دستور /start رو بزنه
+async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
-        "سلام 👋\nبه ربات فروش Proxy Master خوش اومدی!\nیکی از پلن‌های زیر رو انتخاب کن:",
-        reply_markup=reply_markup,
+        "سلام 👋\nبه ربات فروش Proxy Master خوش اومدی!\nپلن VPN خود را انتخاب کنید:",
+        reply_markup=build_category_keyboard(),
     )
 
 
-# وقتی کاربر روی یکی از دکمه‌ها کلیک کنه، این تابع اجرا میشه
-async def plan_selected(update: Update, context: ContextTypes.DEFAULT_TYPE):
+# مدیریت همه‌ی کلیک‌های دکمه (دسته، پلن، بازگشت)
+async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
-    await query.answer()  # به تلگرام میگه که کلیک دریافت شد
+    await query.answer()
 
-    plan_id = query.data
-    plan = PLANS[plan_id]
-    user = query.from_user
+    data = query.data
 
-    # پیام راهنما برای پرداخت
-    text = (
-        f"پلن انتخابی: {plan['title']}\n"
-        f"مبلغ: {plan['price']:,} تومان\n\n"
-        f"لطفاً مبلغ رو به شماره کارت زیر واریز کن:\n"
-        f"💳 {CARD_NUMBER}\n"
-        f"به نام: {CARD_OWNER_NAME}\n\n"
-        f"بعد از واریز، عکس رسید رو همینجا برام بفرست تا کانفیگت رو براب بسازم و بفرستم."
-    )
-    await query.edit_message_text(text)
-
-    # ثبت سفارش در یک فایل ساده تا خودمون ببینیم کی چی سفارش داده
-    with open("orders.txt", "a", encoding="utf-8") as f:
-        f.write(
-            f"کاربر: {user.first_name} (@{user.username}) | آیدی عددی: {user.id} | "
-            f"پلن: {plan['title']} | مبلغ: {plan['price']}\n"
-        )
-
-    # 🔔 ارسال پیام اطلاع‌رسانی به خود شما (ادمین) توی تلگرام
-    await context.bot.send_message(
-        chat_id=ADMIN_CHAT_ID,
-        text=(
-            f"🔔 سفارش جدید!\n\n"
-            f"کاربر: {user.first_name} (@{user.username})\n"
-            f"آیدی عددی کاربر: {user.id}\n"
-            f"پلن: {plan['title']}\n"
-            f"مبلغ: {plan['price']:,} تومان"
-        ),
-    )
-
-
-# دستور مخصوص خود شما (ادمین) برای ارسال کانفیگ به مشتری از طریق خود ربات
-# نحوه استفاده: /send آیدی_عددی_مشتری متن_کانفیگ
-# مثال: /send 123456789 اینم کانفیگت: vless://....
-async def send_config(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    # فقط خود شما (ادمین) اجازه استفاده از این دستور رو دارید
-    if update.message.from_user.id != ADMIN_CHAT_ID:
-        return
-
-    # context.args یعنی کلماتی که بعد از /send نوشته شده
-    if len(context.args) < 2:
-        await update.message.reply_text(
-            "❗️ فرمت درست:\n/send آیدی_عددی_مشتری متن_کانفیگ\n\n"
-            "مثال:\n/send 123456789 اینم کانفیگت: vless://...."
+    # کاربر یک دسته (آیپی ثابت / نامحدود) رو انتخاب کرده
+    if data.startswith("cat:"):
+        cat_id = data.split(":", 1)[1]
+        await query.edit_message_text(
+            f"{CATEGORIES[cat_id]}\nیکی از پلن‌های زیر رو انتخاب کن:",
+            reply_markup=build_plans_keyboard(cat_id),
         )
         return
 
-    # اولین کلمه = آیدی عددی مشتری، بقیه‌ی متن = خود کانفیگ
-    customer_id_text = context.args[0]
-    config_text = " ".join(context.args[1:])
-
-    if not customer_id_text.isdigit():
-        await update.message.reply_text("❗️ آیدی عددی باید فقط عدد باشه.")
+    # کاربر دکمه بازگشت رو زده -> برگرد به انتخاب دسته
+    if data == "back:categories":
+        await query.edit_message_text(
+            "پلن VPN خود را انتخاب کنید:",
+            reply_markup=build_category_keyboard(),
+        )
         return
 
-    customer_id = int(customer_id_text)
+    # کاربر یک پلن نهایی رو انتخاب کرده
+    if data.startswith("plan:"):
+        plan_id = data.split(":", 1)[1]
+        # پیدا کردن پلن داخل هر دو دسته
+        plan = None
+        for cat_plans in PLANS.values():
+            if plan_id in cat_plans:
+                plan = cat_plans[plan_id]
+                break
 
-    try:
-        await context.bot.send_message(
-            chat_id=customer_id,
-            text=f"🎉 کانفیگت آماده‌ست:\n\n{config_text}",
+        user = query.from_user
+        text = (
+            f"پلن انتخابی: {plan['title']}\n"
+            f"مبلغ: {plan['price']:,} تومان\n\n"
+            f"لطفاً مبلغ رو به شماره کارت زیر واریز کن:\n"
+            f"💳 {CARD_NUMBER}\n"
+            f"به نام: {CARD_OWNER_NAME}\n\n"
+            f"بعد از واریز، عکس رسید رو همینجا برام بفرست تا کانفیگت رو براب بسازم و بفرستم."
         )
-        await update.message.reply_text("✅ کانفیگ با موفقیت برای مشتری ارسال شد.")
-    except Exception as e:
-        # مثلاً وقتی مشتری هیچ‌وقت با ربات /start نزده باشه، ارسال ممکنه شکست بخوره
-        await update.message.reply_text(
-            f"❌ ارسال ناموفق بود. احتمالاً مشتری قبلاً با ربات /start نزده.\nخطا: {e}"
-        )
+        await query.edit_message_text(text)
+
+        with open("orders.txt", "a", encoding="utf-8") as f:
+            f.write(
+                f"کاربر: {user.first_name} (@{user.username}) | آیدی عددی: {user.id} | "
+                f"پلن: {plan['title']} | مبلغ: {plan['price']}\n"
+            )
+        return
 
 
-# اجرای اصلی ربات
 def main():
     app = (
         Application.builder()
         .token(BOT_TOKEN)
-        .connect_timeout(30)
-        .read_timeout(30)
-        .write_timeout(30)
-        .pool_timeout(30)
+        .proxy(PROXY_URL)
+        .get_updates_proxy(PROXY_URL)
         .build()
     )
 
     app.add_handler(CommandHandler("start", start))
-    app.add_handler(CommandHandler("send", send_config))
-    app.add_handler(CallbackQueryHandler(plan_selected))
+    app.add_handler(CallbackQueryHandler(button_handler))
 
     print("ربات روشن شد و منتظر پیام‌هاست...")
     app.run_polling()
