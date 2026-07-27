@@ -6,7 +6,7 @@ from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import Application, CommandHandler, CallbackQueryHandler, ContextTypes
 
 # ⚠️ توکن ربات خودت رو اینجا بذار (همونی که از BotFather گرفتی)
-BOT_TOKEN = "8831432109:AAHDmncPPbZJncLWpnoPmJ2xCX7zkTrlw7E"
+BOT_TOKEN = "8831432109:AAE8Uq0tUyBf2AiKvxUKFbd4s3ZJT0RQAYE"
 
 # ⚠️ شماره کارتی که کاربر باید بهش پول واریز کنه
 CARD_NUMBER = "5022291545430785"
