@@ -8,9 +8,6 @@ from telegram.ext import Application, CommandHandler, CallbackQueryHandler, Cont
 # ⚠️ توکن ربات خودت رو اینجا بذار (همونی که از BotFather گرفتی)
 BOT_TOKEN = "8831432109:AAHDmncPPbZJncLWpnoPmJ2xCX7zkTrlw7E"
 
-# آدرس پروکسی محلی V2rayN
-PROXY_URL = "socks5://127.0.0.1:10808"
-
 # ⚠️ شماره کارتی که کاربر باید بهش پول واریز کنه
 CARD_NUMBER = "5022291545430785"
 CARD_OWNER_NAME = "رضا آذرشین"
@@ -118,8 +115,6 @@ def main():
     app = (
         Application.builder()
         .token(BOT_TOKEN)
-        .proxy(PROXY_URL)
-        .get_updates_proxy(PROXY_URL)
         .build()
     )
 
