@@ -8,12 +8,18 @@ from telegram.ext import Application, CommandHandler, CallbackQueryHandler, Cont
 # ⚠️ توکن ربات خودت رو اینجا بذار (از BotFather گرفتی)
 BOT_TOKEN = "8831432109:AAE8Uq0tUyBf2AiKvxUKFbd4s3ZJT0RQAYE"
 
-# ⚠️ آیدی عددی خودت (ادمین) - سفارش‌های جدید به این آیدی فرستاده میشه
+# ⚠️ آیدی عددی خودت (ادمین) - سفارش‌های جدید و درخواست‌های تست به این آیدی فرستاده میشه
 ADMIN_CHAT_ID = 2064026398
 
 # شماره کارتی که کاربر باید بهش پول واریز کنه
 CARD_NUMBER = "5022291545430785"
 CARD_OWNER_NAME = "رضا آذرشین"
+
+# یوزرنیم کانال اصلی (برای چک عضویت اجباری)
+CHANNEL_USERNAME = "@proxxymaster"
+
+# فایلی که آیدی کاربرهایی که قبلاً درخواست تست داده‌اند رو نگه می‌داره
+TRIAL_REQUESTS_FILE = "trial_requests.txt"
 
 # دسته‌بندی پلن‌ها
 CATEGORIES = {
@@ -52,20 +58,117 @@ def build_plans_keyboard(cat_id):
     return InlineKeyboardMarkup(keyboard)
 
 
-# وقتی کاربر دستور /start رو بزنه
+def build_join_keyboard():
+    keyboard = [
+        [InlineKeyboardButton("📢 عضویت در کانال", url=f"https://t.me/{CHANNEL_USERNAME.lstrip('@')}")],
+        [InlineKeyboardButton("✅ عضو شدم", callback_data="checksub:trial")],
+    ]
+    return InlineKeyboardMarkup(keyboard)
+
+
+# ---------- کمک‌تابع‌های مدیریت فایل درخواست‌های تست ----------
+
+def has_requested_trial(user_id: int) -> bool:
+    try:
+        with open(TRIAL_REQUESTS_FILE, "r", encoding="utf-8") as f:
+            ids = f.read().splitlines()
+        return str(user_id) in ids
+    except FileNotFoundError:
+        return False
+
+
+def mark_trial_requested(user_id: int):
+    with open(TRIAL_REQUESTS_FILE, "a", encoding="utf-8") as f:
+        f.write(f"{user_id}\n")
+
+
+async def is_channel_member(context: ContextTypes.DEFAULT_TYPE, user_id: int) -> bool:
+    try:
+        member = await context.bot.get_chat_member(chat_id=CHANNEL_USERNAME, user_id=user_id)
+        return member.status in ("member", "administrator", "creator")
+    except Exception:
+        return False
+
+
+async def notify_admin_trial_request(context: ContextTypes.DEFAULT_TYPE, user):
+    text = (
+        "🆕 درخواست کانفیگ تست ۱ گیگ!\n\n"
+        f"کاربر: {user.first_name} (@{user.username})\n"
+        f"آیدی عددی: {user.id}\n\n"
+        f"برای ارسال کانفیگ:\n/send {user.id} <متن کانفیگ>"
+    )
+    await context.bot.send_message(chat_id=ADMIN_CHAT_ID, text=text)
+
+
+# ---------- هندلرها ----------
+
+# وقتی کاربر دستور /start رو بزنه (با یا بدون پارامتر trial)
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user = update.effective_user
+    args = context.args  # لیست پارامترهای بعد از /start (مثلاً از لینک t.me/BotUsername?start=trial)
+
+    # حالت لینک تست رایگان
+    if args and args[0] == "trial":
+        is_member = await is_channel_member(context, user.id)
+
+        if not is_member:
+            await update.message.reply_text(
+                "برای دریافت کانفیگ تست رایگان، اول باید عضو کانال ما بشی 👇\n"
+                "بعد از عضویت، روی دکمه «✅ عضو شدم» بزن.",
+                reply_markup=build_join_keyboard(),
+            )
+            return
+
+        if has_requested_trial(user.id):
+            await update.message.reply_text(
+                "شما قبلاً یک بار درخواست کانفیگ تست ثبت کرده‌اید. "
+                "اگر کانفیگ رو دریافت نکردید کمی صبر کنید یا با ادمین در ارتباط باشید."
+            )
+            return
+
+        mark_trial_requested(user.id)
+        await notify_admin_trial_request(context, user)
+        await update.message.reply_text(
+            "✅ درخواست شما ثبت شد!\nکانفیگ تست ۱ گیگ به‌زودی برات ارسال میشه، لطفاً کمی صبر کن."
+        )
+        return
+
+    # حالت عادی /start (بدون لینک تست) -> منوی پلن‌ها
     await update.message.reply_text(
         "سلام 👋\nبه ربات فروش Proxy Master خوش اومدی!\nپلن VPN خود را انتخاب کنید:",
         reply_markup=build_category_keyboard(),
     )
 
 
-# مدیریت همه‌ی کلیک‌های دکمه (دسته، پلن، بازگشت)
+# مدیریت همه‌ی کلیک‌های دکمه (دسته، پلن، بازگشت، چک عضویت)
 async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
 
     data = query.data
+    user = query.from_user
+
+    # کاربر روی دکمه «✅ عضو شدم» زده -> دوباره چک عضویت برای تست رایگان
+    if data == "checksub:trial":
+        is_member = await is_channel_member(context, user.id)
+
+        if not is_member:
+            await query.answer("هنوز عضو کانال نشدی! اول جوین کن بعد دکمه رو بزن.", show_alert=True)
+            return
+
+        if has_requested_trial(user.id):
+            await query.edit_message_text(
+                "شما قبلاً یک بار درخواست کانفیگ تست ثبت کرده‌اید. "
+                "اگر کانفیگ رو دریافت نکردید کمی صبر کنید یا با ادمین در ارتباط باشید."
+            )
+            return
+
+        mark_trial_requested(user.id)
+        await notify_admin_trial_request(context, user)
+        await query.edit_message_text(
+            "✅ درخواست شما ثبت شد!\nکانفیگ تست ۱ گیگ به‌زودی برات ارسال میشه، لطفاً کمی صبر کن."
+        )
+        return
 
     # کاربر یک دسته (آیپی ثابت / نامحدود) رو انتخاب کرده
     if data.startswith("cat:"):
@@ -93,7 +196,6 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 plan = cat_plans[plan_id]
                 break
 
-        user = query.from_user
         text = (
             f"پلن انتخابی: {plan['title']}\n"
             f"مبلغ: {plan['price']:,} تومان\n\n"
