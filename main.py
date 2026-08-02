@@ -44,6 +44,7 @@ PLANS = {
 
 def build_category_keyboard():
     keyboard = []
+    keyboard.append([InlineKeyboardButton("🎁 تست رایگان ۱ گیگ", callback_data="trial_request")])
     for cat_id, title in CATEGORIES.items():
         keyboard.append([InlineKeyboardButton(title, callback_data=f"cat:{cat_id}")])
     return InlineKeyboardMarkup(keyboard)
@@ -102,25 +103,12 @@ async def notify_admin_trial_request(context: ContextTypes.DEFAULT_TYPE, user):
 
 # ---------- هندلرها ----------
 
-# وقتی کاربر دستور /start رو بزنه (با یا بدون پارامتر trial)
-async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user = update.effective_user
-    args = context.args  # لیست پارامترهای بعد از /start (مثلاً از لینک t.me/BotUsername?start=trial)
-
+# این تابع بعد از تایید عضویت (چه توی /start چه بعد از زدن دکمه «عضو شدم») اجرا میشه
+async def show_main_content(reply_func, context: ContextTypes.DEFAULT_TYPE, user, args):
     # حالت لینک تست رایگان
     if args and args[0] == "trial":
-        is_member = await is_channel_member(context, user.id)
-
-        if not is_member:
-            await update.message.reply_text(
-                "برای دریافت کانفیگ تست رایگان، اول باید عضو کانال ما بشی 👇\n"
-                "بعد از عضویت، روی دکمه «✅ عضو شدم» بزن.",
-                reply_markup=build_join_keyboard(),
-            )
-            return
-
         if has_requested_trial(user.id):
-            await update.message.reply_text(
+            await reply_func(
                 "شما قبلاً یک بار درخواست کانفیگ تست ثبت کرده‌اید. "
                 "اگر کانفیگ رو دریافت نکردید کمی صبر کنید یا با ادمین در ارتباط باشید."
             )
@@ -128,16 +116,36 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         mark_trial_requested(user.id)
         await notify_admin_trial_request(context, user)
-        await update.message.reply_text(
+        await reply_func(
             "✅ درخواست شما ثبت شد!\nکانفیگ تست ۱ گیگ به‌زودی برات ارسال میشه، لطفاً کمی صبر کن."
         )
         return
 
     # حالت عادی /start (بدون لینک تست) -> منوی پلن‌ها
-    await update.message.reply_text(
+    await reply_func(
         "سلام 👋\nبه ربات فروش Proxy Master خوش اومدی!\nپلن VPN خود را انتخاب کنید:",
         reply_markup=build_category_keyboard(),
     )
+
+
+# وقتی کاربر دستور /start رو بزنه (با یا بدون پارامتر trial) -> همیشه اول عضویت چک میشه
+async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user = update.effective_user
+    args = context.args  # لیست پارامترهای بعد از /start (مثلاً از لینک t.me/BotUsername?start=trial)
+
+    # پارامترهای start رو ذخیره می‌کنیم تا بعد از تایید عضویت (با دکمه) بدونیم قرار بود چیکار کنیم
+    context.user_data["pending_start_args"] = args
+
+    is_member = await is_channel_member(context, user.id)
+    if not is_member:
+        await update.message.reply_text(
+            "برای استفاده از ربات، اول باید عضو کانال ما بشی 👇\n"
+            "بعد از عضویت، روی دکمه «✅ عضو شدم» بزن.",
+            reply_markup=build_join_keyboard(),
+        )
+        return
+
+    await show_main_content(update.message.reply_text, context, user, args)
 
 
 # مدیریت همه‌ی کلیک‌های دکمه (دسته، پلن، بازگشت، چک عضویت)
@@ -148,7 +156,7 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     data = query.data
     user = query.from_user
 
-    # کاربر روی دکمه «✅ عضو شدم» زده -> دوباره چک عضویت برای تست رایگان
+    # کاربر روی دکمه «✅ عضو شدم» زده -> دوباره چک عضویت
     if data == "checksub:trial":
         is_member = await is_channel_member(context, user.id)
 
@@ -156,6 +164,14 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await query.answer("هنوز عضو کانال نشدی! اول جوین کن بعد دکمه رو بزن.", show_alert=True)
             return
 
+        # پارامترهایی که هنگام /start ذخیره کرده بودیم (مثلاً trial یا خالی)
+        pending_args = context.user_data.get("pending_start_args", [])
+        await show_main_content(query.edit_message_text, context, user, pending_args)
+        return
+
+    # کاربر روی دکمه «تست رایگان ۱ گیگ» توی منو زده
+    # (کاربر تا اینجا حتماً عضو کانال بوده، چون منو فقط بعد از تایید عضویت نشون داده میشه)
+    if data == "trial_request":
         if has_requested_trial(user.id):
             await query.edit_message_text(
                 "شما قبلاً یک بار درخواست کانفیگ تست ثبت کرده‌اید. "
