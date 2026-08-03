@@ -25,6 +25,12 @@ TRIAL_REQUESTS_FILE = "trial_requests.txt"
 CATEGORIES = {
     "fixed": "آیپی ثابت (مخصوص حجمی)",
     "unlimited": "نامحدود (معمولی)",
+    "reseller": "🛠 پنل نمایندگی",
+}
+
+# توضیح مخصوص هر دسته (اختیاری) - اگه دسته‌ای توی این دیکشنری نباشه، متن پیش‌فرض نشون داده میشه
+CATEGORY_DESCRIPTIONS = {
+    "reseller": "پنل نمایندگی فروش همراه با پنل مدیریت",
 }
 
 # پلن‌های هر دسته
@@ -38,6 +44,10 @@ PLANS = {
         "unl_1m": {"title": "نامحدود ۱ ماهه", "price": 130000},
         "unl_2m": {"title": "نامحدود ۲ ماهه", "price": 250000},
         "unl_3m": {"title": "نامحدود ۳ ماهه", "price": 350000},
+    },
+    "reseller": {
+        "resell_500g": {"title": "پنل نمایندگی ۵۰۰ گیگ", "price": 750000},
+        "resell_1t": {"title": "پنل نمایندگی ۱ ترابایت", "price": 1500000},
     },
 }
 
@@ -186,11 +196,16 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
         return
 
-    # کاربر یک دسته (آیپی ثابت / نامحدود) رو انتخاب کرده
+    # کاربر یک دسته (آیپی ثابت / نامحدود / پنل نمایندگی) رو انتخاب کرده
     if data.startswith("cat:"):
         cat_id = data.split(":", 1)[1]
+        description = CATEGORY_DESCRIPTIONS.get(cat_id)
+        if description:
+            header = f"{CATEGORIES[cat_id]}\n\n{description}\n\nیکی از گزینه‌های زیر رو انتخاب کن:"
+        else:
+            header = f"{CATEGORIES[cat_id]}\nیکی از پلن‌های زیر رو انتخاب کن:"
         await query.edit_message_text(
-            f"{CATEGORIES[cat_id]}\nیکی از پلن‌های زیر رو انتخاب کن:",
+            header,
             reply_markup=build_plans_keyboard(cat_id),
         )
         return
